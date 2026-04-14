@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Penny Identifier AI — Upload photos & videos, get everything</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='28' fill='%23b87333'/%3E%3Ctext x='32' y='42' font-size='32' text-anchor='middle' fill='%23fff' font-family='Georgia'%3E1%3C/text%3E%3C/svg%3E" />
+  </head>
+  <body>
+    <header class="hero">
+      <div class="hero-inner">
+        <div class="coin-logo" aria-hidden="true">1¢</div>
+        <div>
+          <h1>Penny Identifier <span class="ai-badge">AI</span></h1>
+          <p class="sub">Upload as many photos and videos as you want. Get the coin name, mint mark, mintage, grade, value, errors, history — <em>everything</em>.</p>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section class="card">
+        <h2>1. Upload your penny</h2>
+        <p class="muted">Multiple photos (obverse, reverse, close-ups, angles) give the best result. Videos are sampled into frames. HEIC, JPG, PNG, WEBP, MP4, MOV all work.</p>
+
+        <div id="dropzone" class="dropzone" tabindex="0">
+          <div class="dz-icon">📷🎞️</div>
+          <div class="dz-text"><strong>Drop files here</strong> or click to browse</div>
+          <div class="dz-sub">Unlimited count. Max <span id="maxMb">200</span>MB per file.</div>
+          <input id="fileInput" type="file" multiple accept="image/*,video/*" hidden />
+        </div>
+
+        <div id="fileList" class="file-list"></div>
+
+        <div class="controls">
+          <label class="mode-toggle">
+            <span>Grouping:</span>
+            <select id="mode">
+              <option value="single" selected>All uploads are the SAME coin (combine)</option>
+              <option value="separate">Each file is a DIFFERENT coin</option>
+            </select>
+          </label>
+          <label class="hint-input">
+            <span>Optional notes for the AI (weight, provenance, etc.):</span>
+            <input id="hint" type="text" placeholder='e.g. "weighs 3.11 g, found in a 1943 roll"' />
+          </label>
+        </div>
+
+        <div class="actions">
+          <button id="analyzeBtn" class="primary" disabled>🔍 Analyze with AI</button>
+          <button id="clearBtn" class="ghost">Clear</button>
+        </div>
+
+        <div id="status" class="status" aria-live="polite"></div>
+      </section>
+
+      <section id="results" class="results"></section>
+
+      <section class="card about">
+        <h2>What you get</h2>
+        <ul class="feature-grid">
+          <li><strong>Identification</strong><span>Name, series, country, year, mint mark, mint location, designer, variety.</span></li>
+          <li><strong>Physical specs</strong><span>Composition, weight, diameter, thickness, edge type.</span></li>
+          <li><strong>Mintage & rarity</strong><span>Total struck, proof counts, estimated survivors, rarity tier.</span></li>
+          <li><strong>Grade</strong><span>Sheldon grade estimate, strike, luster, surface, eye appeal, color (BN/RB/RD).</span></li>
+          <li><strong>Value estimates</strong><span>Retail ranges by grade, melt value, market trend, auction comp notes.</span></li>
+          <li><strong>Errors & varieties</strong><span>DDO, RPM, off-center, wrong planchet, clipped, lamination, BIE, and more.</span></li>
+          <li><strong>History & design</strong><span>Background, obverse/reverse descriptions, symbolism, fun facts.</span></li>
+          <li><strong>Collector tips</strong><span>Authentication red flags, storage advice, next steps (e.g. third-party grading).</span></li>
+        </ul>
+      </section>
+    </main>
+
+    <footer>
+      <span>Powered by Claude vision · Built for coin nerds 🪙</span>
+    </footer>
+
+    <template id="resultTemplate">
+      <article class="result">
+        <header class="result-header">
+          <h3 class="coin-title"></h3>
+          <div class="chips">
+            <span class="chip chip-year"></span>
+            <span class="chip chip-mint"></span>
+            <span class="chip chip-grade"></span>
+            <span class="chip chip-value"></span>
+          </div>
+        </header>
+
+        <div class="confidence">
+          <label>Overall confidence</label>
+          <div class="bar"><div class="bar-fill"></div></div>
+          <span class="conf-pct"></span>
+        </div>
+
+        <div class="result-grid">
+          <div class="panel">
+            <h4>🪪 Identification</h4>
+            <dl class="kv" data-section="identification"></dl>
+          </div>
+          <div class="panel">
+            <h4>📏 Physical Specs</h4>
+            <dl class="kv" data-section="physical_specs"></dl>
+          </div>
+          <div class="panel">
+            <h4>🏭 Mintage & Rarity</h4>
+            <dl class="kv" data-section="mintage"></dl>
+          </div>
+          <div class="panel">
+            <h4>🔬 Grade</h4>
+            <dl class="kv" data-section="grade"></dl>
+          </div>
+          <div class="panel panel-wide">
+            <h4>💰 Value Estimates (USD)</h4>
+            <div class="value-summary"></div>
+            <table class="grade-table"><thead><tr><th>Grade</th><th>Low</th><th>High</th></tr></thead><tbody></tbody></table>
+            <div class="value-notes"></div>
+          </div>
+          <div class="panel panel-wide">
+            <h4>⚠️ Errors & Varieties</h4>
+            <div class="errors-body"></div>
+          </div>
+          <div class="panel panel-wide">
+            <h4>📖 History</h4>
+            <p class="history-text"></p>
+          </div>
+          <div class="panel">
+            <h4>🎨 Design Notes</h4>
+            <dl class="kv" data-section="design_notes"></dl>
+          </div>
+          <div class="panel">
+            <h4>🔐 Authentication Flags</h4>
+            <ul class="auth-flags"></ul>
+          </div>
+          <div class="panel">
+            <h4>💡 Collector Tips</h4>
+            <ul class="tips"></ul>
+          </div>
+          <div class="panel">
+            <h4>➡️ Recommended Next Steps</h4>
+            <ul class="next-steps"></ul>
+          </div>
+          <div class="panel panel-wide">
+            <h4>✨ Fun Facts</h4>
+            <ul class="fun-facts"></ul>
+          </div>
+          <div class="panel panel-wide">
+            <h4>❓ Uncertainty Notes</h4>
+            <p class="uncertainty"></p>
+          </div>
+        </div>
+
+        <details class="raw">
+          <summary>Raw JSON (for power users)</summary>
+          <pre class="raw-json"></pre>
+        </details>
+      </article>
+    </template>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
