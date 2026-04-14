@@ -278,6 +278,177 @@ async function callClaude(imageBlocks, hint) {
   return JSON.parse(t);
 }
 
+// ---------- Gallery (persisted in localStorage) ----------
+const GAL_KEY = 'penny_gallery_v1';
+
+function loadGallery() {
+  try { return JSON.parse(localStorage.getItem(GAL_KEY) || '[]'); }
+  catch { return []; }
+}
+function saveGallery(items) {
+  try {
+    localStorage.setItem(GAL_KEY, JSON.stringify(items));
+    return true;
+  } catch (e) {
+    alert('Gallery storage is full. Export your gallery and remove some entries.');
+    return false;
+  }
+}
+function addToGallery(entry) {
+  const items = loadGallery();
+  items.unshift(entry);
+  if (!saveGallery(items)) return false;
+  renderGallery();
+  return true;
+}
+function removeFromGallery(id) {
+  const items = loadGallery().filter((x) => x.id !== id);
+  saveGallery(items);
+  renderGallery();
+}
+
+function midValue(data) {
+  const v = (data && data.value_estimates_usd) || {};
+  if (v.current_estimate_low != null && v.current_estimate_high != null) {
+    return (Number(v.current_estimate_low) + Number(v.current_estimate_high)) / 2;
+  }
+  if (v.current_estimate_low != null) return Number(v.current_estimate_low);
+  if (v.current_estimate_high != null) return Number(v.current_estimate_high);
+  return 0;
+}
+
+function renderGallery() {
+  const grid = document.getElementById('galleryGrid');
+  const empty = document.getElementById('galleryEmpty');
+  const totals = document.getElementById('galleryTotals');
+  const countChip = document.getElementById('galleryCount');
+  const items = loadGallery();
+  grid.innerHTML = '';
+  totals.innerHTML = '';
+  countChip.textContent = items.length ? `${items.length} coin${items.length === 1 ? '' : 's'}` : '';
+
+  if (items.length === 0) {
+    empty.classList.remove('hidden');
+    return;
+  }
+  empty.classList.add('hidden');
+
+  let low = 0, high = 0, mid = 0;
+  for (const it of items) {
+    const v = it.data.value_estimates_usd || {};
+    if (v.current_estimate_low != null) low += Number(v.current_estimate_low);
+    if (v.current_estimate_high != null) high += Number(v.current_estimate_high);
+    mid += midValue(it.data);
+  }
+  totals.innerHTML = `
+    <div class="total-tile"><div class="label">Low estimate</div><div class="value">${fmtMoney(low)}</div></div>
+    <div class="total-tile mid"><div class="label">Mid estimate</div><div class="value">${fmtMoney(mid)}</div></div>
+    <div class="total-tile"><div class="label">High estimate</div><div class="value">${fmtMoney(high)}</div></div>
+    <div class="total-tile count"><div class="label">Coins</div><div class="value">${items.length}</div></div>
+  `;
+
+  for (const it of items) {
+    const id = it.data.identification || {};
+    const v = it.data.value_estimates_usd || {};
+    const title = [id.year, id.mint_mark, id.coin_name].filter(Boolean).join(' ') || id.coin_name || 'Unknown coin';
+    const grade = (it.data.grade || {}).estimated_grade || '';
+    const valStr = (v.current_estimate_low != null || v.current_estimate_high != null)
+      ? `${fmtMoney(v.current_estimate_low)} – ${fmtMoney(v.current_estimate_high)}` : '';
+    const el = document.createElement('div');
+    el.className = 'gallery-item';
+    el.innerHTML = `
+      <img src="${it.thumb || ''}" alt="" loading="lazy" />
+      <div class="gi-body">
+        <div class="gi-title">${escapeHtml(title)}</div>
+        <div class="gi-meta">${escapeHtml(grade)}${grade && it.savedAt ? ' · ' : ''}${new Date(it.savedAt).toLocaleDateString()}</div>
+        <div class="gi-val">${valStr}</div>
+      </div>
+    `;
+    el.addEventListener('click', () => openDetail(it));
+    grid.appendChild(el);
+  }
+}
+
+function openDetail(item) {
+  const overlay = document.getElementById('detailOverlay');
+  const body = document.getElementById('detailBody');
+  body.innerHTML = '';
+  const wrap = document.createElement('div');
+  wrap.className = 'results';
+  body.appendChild(wrap);
+  const prevResults = resultsEl;
+  // temporarily target overlay
+  const article = buildResultNode({ data: item.data, thumb: item.thumb });
+  // No "save" button in detail view — already saved. Swap it.
+  const btn = article.querySelector('.save-btn');
+  if (btn) btn.remove();
+  wrap.appendChild(article);
+  overlay.hidden = false;
+  document.body.style.overflow = 'hidden';
+
+  const del = document.getElementById('deleteItem');
+  del.onclick = () => {
+    if (confirm('Remove this penny from your gallery?')) {
+      removeFromGallery(item.id);
+      closeDetail();
+    }
+  };
+}
+function closeDetail() {
+  document.getElementById('detailOverlay').hidden = true;
+  document.body.style.overflow = '';
+}
+document.getElementById('overlayClose').addEventListener('click', closeDetail);
+document.getElementById('detailOverlay').addEventListener('click', (e) => {
+  if (e.target.id === 'detailOverlay') closeDetail();
+});
+
+// Export / Import
+document.getElementById('exportGallery').addEventListener('click', () => {
+  const items = loadGallery();
+  if (items.length === 0) { alert('Gallery is empty.'); return; }
+  const blob = new Blob([JSON.stringify(items, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `penny-gallery-${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+document.getElementById('importGallery').addEventListener('click', () => {
+  document.getElementById('importFile').click();
+});
+document.getElementById('importFile').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const incoming = JSON.parse(text);
+    if (!Array.isArray(incoming)) throw new Error('Invalid gallery file');
+    const merged = [...incoming, ...loadGallery()];
+    // dedupe by id
+    const seen = new Set(), out = [];
+    for (const it of merged) { if (!seen.has(it.id)) { seen.add(it.id); out.push(it); } }
+    saveGallery(out);
+    renderGallery();
+    alert(`Imported ${incoming.length} entries.`);
+  } catch (err) {
+    alert('Import failed: ' + err.message);
+  } finally {
+    e.target.value = '';
+  }
+});
+
+async function makeThumbnail(file) {
+  if (file.type.startsWith('image/')) {
+    const s = await shrinkImage(file, 400);
+    return `data:${s.mediaType};base64,${s.base64}`;
+  }
+  const frames = await extractVideoFrames(file, 1);
+  if (frames[0]) return `data:${frames[0].mediaType};base64,${frames[0].base64}`;
+  return '';
+}
+
 // ---------- Submit flow ----------
 
 analyzeBtn.addEventListener('click', async () => {
@@ -300,10 +471,12 @@ analyzeBtn.addEventListener('click', async () => {
         } else {
           blocks.push(...await extractVideoFrames(f, frames));
         }
-        if (blocks.length) groups.push({ label: f.name, blocks });
+        const thumb = await makeThumbnail(f);
+        if (blocks.length) groups.push({ label: f.name, blocks, thumb });
       }
     } else {
       const combined = [];
+      let firstThumb = '';
       for (const f of pendingFiles) {
         statusEl.className = 'status';
         statusEl.innerHTML = `<span class="spinner"></span>Preparing ${f.name}…`;
@@ -312,8 +485,9 @@ analyzeBtn.addEventListener('click', async () => {
         } else {
           combined.push(...await extractVideoFrames(f, frames));
         }
+        if (!firstThumb) firstThumb = await makeThumbnail(f);
       }
-      groups.push({ label: 'Combined submission', blocks: combined.slice(0, 20) });
+      groups.push({ label: 'Combined submission', blocks: combined.slice(0, 20), thumb: firstThumb });
     }
 
     let i = 0;
@@ -321,7 +495,8 @@ analyzeBtn.addEventListener('click', async () => {
       i++;
       statusEl.innerHTML = `<span class="spinner"></span>Analyzing ${i}/${groups.length} (${g.blocks.length} images) with ${modelSel.value}…`;
       const data = await callClaude(g.blocks, hintEl.value);
-      renderResult({ data, label: g.label, imageCount: g.blocks.length });
+      const node = buildResultNode({ data, thumb: g.thumb });
+      resultsEl.appendChild(node);
     }
     statusEl.className = 'status ok';
     statusEl.textContent = `✅ Done — ${groups.length} coin(s) analyzed.`;
@@ -350,9 +525,27 @@ function val(v) {
   return String(v);
 }
 
-function renderResult({ data }) {
+function buildResultNode({ data, thumb }) {
   const node = resultTpl.content.cloneNode(true);
   const article = node.querySelector('.result');
+
+  const saveBtn = article.querySelector('.save-btn');
+  if (saveBtn) {
+    saveBtn.addEventListener('click', () => {
+      if (saveBtn.classList.contains('saved')) return;
+      const entry = {
+        id: 'p_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
+        savedAt: Date.now(),
+        data,
+        thumb: thumb || '',
+      };
+      if (addToGallery(entry)) {
+        saveBtn.classList.add('saved');
+        saveBtn.textContent = '✅ Saved';
+        saveBtn.disabled = true;
+      }
+    });
+  }
   const id = data.identification || {};
   const grade = data.grade || {};
   const value = data.value_estimates_usd || {};
@@ -414,7 +607,7 @@ function renderResult({ data }) {
   fillList(article.querySelector('.auth-flags'), data.authentication_flags);
   article.querySelector('.uncertainty').textContent = data.uncertainty_notes || 'None.';
   article.querySelector('.raw-json').textContent = JSON.stringify(data, null, 2);
-  resultsEl.appendChild(article);
+  return article;
 }
 
 function fillKV(dl, obj) {
@@ -439,3 +632,6 @@ function fillList(ul, arr) {
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
+
+// Initial paint of gallery on page load
+renderGallery();

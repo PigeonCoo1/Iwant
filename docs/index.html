@@ -81,6 +81,30 @@
 
       <section id="results" class="results"></section>
 
+      <section id="galleryCard" class="card gallery-card">
+        <div class="gallery-header">
+          <h2>🪙 My Penny Gallery <span id="galleryCount" class="chip"></span></h2>
+          <div class="gallery-actions">
+            <button id="exportGallery" class="ghost">⬇ Export</button>
+            <button id="importGallery" class="ghost">⬆ Import</button>
+            <input id="importFile" type="file" accept="application/json" hidden />
+          </div>
+        </div>
+        <div id="galleryTotals" class="gallery-totals"></div>
+        <div id="galleryGrid" class="gallery-grid"></div>
+        <p id="galleryEmpty" class="muted">Your gallery is empty. Analyze a penny above and tap <strong>💾 Save to Gallery</strong> to add it here.</p>
+      </section>
+
+      <div id="detailOverlay" class="overlay" hidden>
+        <div class="overlay-inner">
+          <button class="overlay-close" id="overlayClose" aria-label="Close">&times;</button>
+          <div id="detailBody"></div>
+          <div class="overlay-footer">
+            <button id="deleteItem" class="danger">🗑 Remove from gallery</button>
+          </div>
+        </div>
+      </div>
+
       <section class="card about">
         <h2>What you get</h2>
         <ul class="feature-grid">
@@ -104,13 +128,16 @@
     <template id="resultTemplate">
       <article class="result">
         <header class="result-header">
-          <h3 class="coin-title"></h3>
-          <div class="chips">
-            <span class="chip chip-year"></span>
-            <span class="chip chip-mint"></span>
-            <span class="chip chip-grade"></span>
-            <span class="chip chip-value"></span>
+          <div>
+            <h3 class="coin-title"></h3>
+            <div class="chips">
+              <span class="chip chip-year"></span>
+              <span class="chip chip-mint"></span>
+              <span class="chip chip-grade"></span>
+              <span class="chip chip-value"></span>
+            </div>
           </div>
+          <button class="save-btn primary">💾 Save to Gallery</button>
         </header>
         <div class="confidence">
           <label>Overall confidence</label>
